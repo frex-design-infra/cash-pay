@@ -593,7 +593,11 @@ async function renderList(){
 }
 
 async function chStatus(id,st){
-  try{ await sbPatch('expenses',`id=eq.${id}`,{status:st}); await renderList(); }catch(e){ showToast('更新に失敗しました'); }
+  try{
+    await sbPatch('expenses',`id=eq.${id}`,{status:st});
+    if(st==='精算') await sendMail(id);
+    await renderList();
+  }catch(e){ showToast('更新に失敗しました'); }
 }
 
 /* ===== 詳細 ===== */
