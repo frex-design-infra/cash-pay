@@ -482,18 +482,26 @@ async function submitForm(){
   finally{btn.disabled=false;btn.textContent='申請する';}
 }
 
-/* メール送信 */
-async function sendMail(expenseId){
+/* メール送信（mailto） */
+function openMailTo(expenseId){
   const r=records.find(d=>d.id===expenseId);if(!r)return;
-  try{
-    const res=await fetch(`${SB_URL}/functions/v1/send-mail`,{
-      method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':'Bearer '+SB_KEY},
-      body:JSON.stringify({applicant:r.member_name,amount:r.total,expense_id:r.id,applied_date:fmtD(r.applied_date)})
-    });
-    const data=await res.json();
-    console.log('メール送信結果:',data);
-  }catch(e){console.warn('メール送信エラー:',e);}
+  const mem=members.find(m=>m.name===r.member_name);
+  const to=mem&&mem.email?mem.email:'';
+  const subject=encodeURIComponent(`【立替精算】精算のご依頼（${r.id}）`);
+  const body=encodeURIComponent(
+`${r.member_name} 様
+
+以下の立替精算が承認されました。
+つきましては、精算処理をお願いいたします。
+
+■ 申請番号：${r.id}
+■ 申請日　：${fmtD(r.applied_date)}
+■ 合計金額：${fmt$(r.total)}
+
+株式会社フレックスデザイン
+総務・企画販売事業部`
+  );
+  window.location.href=`mailto:${to}?subject=${subject}&body=${body}`;
 }
 
 /* ステータス変更 */
@@ -501,7 +509,7 @@ async function chStatus(id,st){
   try{
     await sbPatch('expenses',`id=eq.${id}`,{status:st});
     await renderList();
-    if(st==='精算')sendMail(id).catch(e=>console.warn(e));
+    if(st==='精算')openMailTo(id);
   }catch(e){
     console.error('chStatusエラー:',e);
     showToast('更新に失敗しました');
