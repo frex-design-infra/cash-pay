@@ -595,8 +595,10 @@ async function renderList(){
 async function chStatus(id,st){
   try{
     await sbPatch('expenses',`id=eq.${id}`,{status:st});
-    if(st==='精算') await sendMail(id);
     await renderList();
+    if(st==='精算'){
+      sendMail(id).catch(e=>console.warn('メール送信エラー:',e));
+    }
   }catch(e){ showToast('更新に失敗しました'); }
 }
 
