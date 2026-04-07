@@ -109,7 +109,6 @@ tr:hover td{background:#fafbfc}
 </style>
 </head>
 <body>
-
 <header>
   <h1>立替精算管理システム</h1>
   <span>株式会社フレックスデザイン</span>
@@ -183,7 +182,7 @@ tr:hover td{background:#fafbfc}
       <tbody id="list-body"></tbody>
     </table>
     <div id="no-data" class="no-data" style="display:none">データがありません</div>
-    <div id="list-loading" class="loading"><span class="spinner"></span>読み込み中...</div>
+    <div id="list-loading" class="loading" style="display:none"><span class="spinner"></span>読み込み中...</div>
   </div>
 </div>
 
@@ -318,48 +317,24 @@ tr:hover td{background:#fafbfc}
 <div class="toast" id="toast"></div>
 
 <script>
-/* ===== Supabase設定 ===== */
-const SB_URL = 'https://twolywmokxggjnugzuig.supabase.co';
-const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR3b2x5d21va3hnZ2pudWd6dWlnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1NDQ0MzksImV4cCI6MjA5MTEyMDQzOX0.fviTO35D3s3Rqz3VtTVcXdlgESjiO9yz4PRvsxGHVCI';
-const HEADS  = {'Content-Type':'application/json','apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY};
-
-async function sbGet(table, params=''){
-  const res = await fetch(`${SB_URL}/rest/v1/${table}?${params}`, {headers:{...HEADS,'Prefer':'return=representation'}});
-  if(!res.ok) throw new Error(await res.text());
-  return res.json();
-}
-async function sbPost(table, body){
-  const res = await fetch(`${SB_URL}/rest/v1/${table}`, {method:'POST', headers:{...HEADS,'Prefer':'return=representation'}, body:JSON.stringify(body)});
-  if(!res.ok) throw new Error(await res.text());
-  return res.json();
-}
-async function sbPatch(table, params, body){
-  const res = await fetch(`${SB_URL}/rest/v1/${table}?${params}`, {method:'PATCH', headers:{...HEADS,'Prefer':'return=representation'}, body:JSON.stringify(body)});
-  if(!res.ok) throw new Error(await res.text());
-  return res.json();
-}
-async function sbDelete(table, params){
-  const res = await fetch(`${SB_URL}/rest/v1/${table}?${params}`, {method:'DELETE', headers:HEADS});
-  if(!res.ok) throw new Error(await res.text());
-}
-
-/* ===== 定数・状態 ===== */
+const SB_URL='https://twolywmokxggjnugzuig.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR3b2x5d21va3hnZ2pudWd6dWlnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1NDQ0MzksImV4cCI6MjA5MTEyMDQzOX0.fviTO35D3s3Rqz3VtTVcXdlgESjiO9yz4PRvsxGHVCI';
+const HEADS={'Content-Type':'application/json','apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY};
 const CATS=['交通費','宿泊費','飲食費','消耗品費','工具・資材費','通信費','その他'];
-let members=[], records=[], fSeq=0, eSeq=0, editId=null;
+let members=[],records=[],fSeq=0,eSeq=0,editId=null;
+const fmt$=n=>'¥'+Number(n).toLocaleString();
+const fmtD=s=>s?s.replace(/-/g,'/'):'';
+const scls=s=>({未承認:'s-pending',承認済:'s-approved',精算:'s-paid',受領:'s-received'}[s]||'s-pending');
+const mkBtn=(cls,txt,fn)=>{const b=document.createElement('button');b.className=`btn ${cls}`;b.textContent=txt;b.addEventListener('click',fn);return b;};
 
-const fmt$ = n => '¥'+Number(n).toLocaleString();
-const fmtD = s => s?s.replace(/-/g,'/'):'';
-const scls  = s => ({未承認:'s-pending',承認済:'s-approved',精算:'s-paid',受領:'s-received'}[s]||'s-pending');
-const mkBtn = (cls,txt,fn) => { const b=document.createElement('button'); b.className=`btn ${cls}`; b.textContent=txt; b.addEventListener('click',fn); return b; };
+async function sbGet(t,p=''){const r=await fetch(`${SB_URL}/rest/v1/${t}?${p}`,{headers:{...HEADS,'Prefer':'return=representation'}});if(!r.ok)throw new Error(await r.text());return r.json();}
+async function sbPost(t,b){const r=await fetch(`${SB_URL}/rest/v1/${t}`,{method:'POST',headers:{...HEADS,'Prefer':'return=representation'},body:JSON.stringify(b)});if(!r.ok)throw new Error(await r.text());return r.json();}
+async function sbPatch(t,p,b){const r=await fetch(`${SB_URL}/rest/v1/${t}?${p}`,{method:'PATCH',headers:{...HEADS,'Prefer':'return=representation'},body:JSON.stringify(b)});if(!r.ok)throw new Error(await r.text());return r.json();}
+async function sbDelete(t,p){const r=await fetch(`${SB_URL}/rest/v1/${t}?${p}`,{method:'DELETE',headers:HEADS});if(!r.ok)throw new Error(await r.text());}
 
-/* ===== トースト ===== */
-function showToast(msg){
-  const t=document.getElementById('toast');
-  t.textContent=msg; t.classList.add('show');
-  setTimeout(()=>t.classList.remove('show'),2000);
-}
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2000);}
 
-/* ===== 祝日 ===== */
+/* 祝日 */
 const HOLIDAYS=(()=>{
   const fixed={'01-01':'元日','02-11':'建国記念の日','02-23':'天皇誕生日','04-29':'昭和の日','05-03':'憲法記念日','05-04':'みどりの日','05-05':'こどもの日','08-11':'山の日','11-03':'文化の日','11-23':'勤労感謝の日'};
   const cache={};
@@ -378,7 +353,7 @@ const HOLIDAYS=(()=>{
   return{get:y=>{if(!cache[y])cache[y]=build(y);return cache[y];}};
 })();
 
-/* ===== カレンダー ===== */
+/* カレンダー */
 let calTarget=null,calY=0,calM=0;
 const calPopup=document.getElementById('cal-popup');
 const DOWS=['日','月','火','水','木','金','土'];
@@ -386,57 +361,51 @@ function calRender(){
   document.getElementById('cal-ym').textContent=`${calY}年${calM+1}月`;
   const grid=document.getElementById('cal-grid');
   grid.innerHTML=DOWS.map(d=>`<div class="cal-dow">${d}</div>`).join('');
-  const first=new Date(calY,calM,1).getDay(), last=new Date(calY,calM+1,0).getDate(), prevL=new Date(calY,calM,0).getDate();
-  const sel=calTarget?calTarget.value:'', today=new Date(), hols=HOLIDAYS.get(calY);
-  for(let i=0;i<first;i++) grid.innerHTML+=`<div class="cal-day other-month">${prevL-first+1+i}</div>`;
+  const first=new Date(calY,calM,1).getDay(),last=new Date(calY,calM+1,0).getDate(),prevL=new Date(calY,calM,0).getDate();
+  const sel=calTarget?calTarget.value:'',today=new Date(),hols=HOLIDAYS.get(calY);
+  for(let i=0;i<first;i++)grid.innerHTML+=`<div class="cal-day other-month">${prevL-first+1+i}</div>`;
   for(let d=1;d<=last;d++){
     const ds=`${calY}-${String(calM+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-    const dw=(first+d-1)%7, isTod=today.getFullYear()===calY&&today.getMonth()===calM&&today.getDate()===d, isSel=sel===ds, hol=hols[ds];
+    const dw=(first+d-1)%7,isTod=today.getFullYear()===calY&&today.getMonth()===calM&&today.getDate()===d,isSel=sel===ds,hol=hols[ds];
     const cls=['cal-day',dw===0||hol?'hol':'',dw===6?'sat':'',isTod?'today':'',isSel?'selected':''].filter(Boolean).join(' ');
     grid.innerHTML+=`<div class="${cls}" data-date="${ds}"${hol?` data-hol="${hol}"`:''}>${d}</div>`;
   }
-  for(let d=1;d<=42-first-last;d++) grid.innerHTML+=`<div class="cal-day other-month">${d}</div>`;
+  for(let d=1;d<=42-first-last;d++)grid.innerHTML+=`<div class="cal-day other-month">${d}</div>`;
   grid.querySelectorAll('[data-date]').forEach(el=>{
-    el.addEventListener('click',()=>{ if(calTarget){calTarget.value=el.dataset.date;calTarget.dispatchEvent(new Event('input',{bubbles:true}));} calClose(); });
+    el.addEventListener('click',()=>{if(calTarget){calTarget.value=el.dataset.date;calTarget.dispatchEvent(new Event('input',{bubbles:true}));}calClose();});
     if(el.dataset.hol){
       el.addEventListener('mouseenter',()=>{const t=document.createElement('div');t.className='cal-tooltip';t.textContent=el.dataset.hol;el.appendChild(t);});
       el.addEventListener('mouseleave',()=>el.querySelectorAll('.cal-tooltip').forEach(t=>t.remove()));
     }
   });
 }
-function calOpen(input){ calTarget=input; const v=input.value?new Date(input.value):new Date(); calY=v.getFullYear();calM=v.getMonth(); const r=input.getBoundingClientRect(); calPopup.style.top=(r.bottom+window.scrollY+4)+'px'; calPopup.style.left=Math.min(r.left,window.innerWidth-290)+'px'; calPopup.classList.add('open'); calRender(); }
-function calClose(){ calPopup.classList.remove('open'); calTarget=null; }
+function calOpen(input){calTarget=input;const v=input.value?new Date(input.value):new Date();calY=v.getFullYear();calM=v.getMonth();const r=input.getBoundingClientRect();calPopup.style.top=(r.bottom+window.scrollY+4)+'px';calPopup.style.left=Math.min(r.left,window.innerWidth-290)+'px';calPopup.classList.add('open');calRender();}
+function calClose(){calPopup.classList.remove('open');calTarget=null;}
 document.getElementById('cal-prev').addEventListener('click',e=>{e.stopPropagation();calM--;if(calM<0){calM=11;calY--;}calRender();});
 document.getElementById('cal-next').addEventListener('click',e=>{e.stopPropagation();calM++;if(calM>11){calM=0;calY++;}calRender();});
 document.addEventListener('click',e=>{if(!calPopup.contains(e.target)&&e.target!==calTarget)calClose();});
-function hookDates(){ document.querySelectorAll('input[type=date]').forEach(el=>{ if(el.dataset.ch)return; el.dataset.ch='1'; el.addEventListener('click',e=>{e.stopPropagation();calOpen(el);}); }); }
+function hookDates(){document.querySelectorAll('input[type=date]').forEach(el=>{if(el.dataset.ch)return;el.dataset.ch='1';el.addEventListener('click',e=>{e.stopPropagation();calOpen(el);});});}
 
-/* ===== ナビ ===== */
+/* ナビ */
 document.getElementById('nav-apply').addEventListener('click',()=>showPage('apply'));
 document.getElementById('nav-list').addEventListener('click',()=>showPage('list'));
 document.getElementById('nav-stats').addEventListener('click',()=>showPage('stats'));
 function showPage(p){
-  ['apply','list','stats'].forEach(n=>{ document.getElementById('page-'+n).classList.toggle('active',n===p); document.getElementById('nav-'+n).classList.toggle('active',n===p); });
-  if(p==='list')  renderList();
-  if(p==='stats') renderStats();
+  ['apply','list','stats'].forEach(n=>{document.getElementById('page-'+n).classList.toggle('active',n===p);document.getElementById('nav-'+n).classList.toggle('active',n===p);});
+  if(p==='list')renderList();
+  if(p==='stats')renderStats();
 }
 
-/* ===== メンバー ===== */
+/* メンバー */
 async function loadMembers(){
-  try{ members=await sbGet('members','order=name'); }catch(e){ console.error(e); }
+  try{members=await sbGet('members','order=name');}catch(e){console.error(e);}
   renderNameSel('f-name','');
 }
 function renderNameSel(selId,curVal){
   const el=document.getElementById(selId);
-  el.innerHTML=members.length
-    ?members.map(m=>`<option value="${m.id}" data-name="${m.name}"${m.id===curVal?' selected':''}>${m.name}</option>`).join('')
-    :'<option value="">（＋追加ボタンで登録）</option>';
+  el.innerHTML=members.length?members.map(m=>`<option value="${m.id}" data-name="${m.name}"${m.id===curVal?' selected':''}>${m.name}</option>`).join(''):'<option value="">（＋追加ボタンで登録）</option>';
 }
-function getSelectedMember(selId){
-  const el=document.getElementById(selId);
-  const opt=el.options[el.selectedIndex];
-  return opt?{id:opt.value,name:opt.dataset.name}:{id:'',name:''};
-}
+function getSelectedMember(selId){const el=document.getElementById(selId);const opt=el.options[el.selectedIndex];return opt?{id:opt.value,name:opt.dataset.name}:{id:'',name:''};}
 
 function renderMList(){
   const el=document.getElementById('m-list');
@@ -444,118 +413,106 @@ function renderMList(){
   el.innerHTML='';
   members.forEach(m=>{
     const d=document.createElement('div');d.className='member-item';
-    const nameSpan=document.createElement('span');nameSpan.textContent=m.name+(m.email?`（${m.email}）`:'');
-    const editNameIn=document.createElement('input');editNameIn.type='text';editNameIn.value=m.name;editNameIn.style.cssText='display:none;width:120px;margin-right:4px;padding:4px 6px;font-size:12px';
-    const editEmailIn=document.createElement('input');editEmailIn.type='email';editEmailIn.value=m.email||'';editEmailIn.style.cssText='display:none;width:160px;margin-right:4px;padding:4px 6px;font-size:12px';
+    const ns=document.createElement('span');ns.textContent=m.name+(m.email?`（${m.email}）`:'');
+    const ni=document.createElement('input');ni.type='text';ni.value=m.name;ni.style.cssText='display:none;width:120px;margin-right:4px;padding:4px 6px;font-size:12px';
+    const ei=document.createElement('input');ei.type='email';ei.value=m.email||'';ei.style.cssText='display:none;width:160px;margin-right:4px;padding:4px 6px;font-size:12px';
     const wrap=document.createElement('div');wrap.style.cssText='display:flex;gap:4px;align-items:center';
-    const bEdit=mkBtn('btn-secondary btn-sm','修正',()=>{
-      nameSpan.style.display='none';editNameIn.style.display='';editEmailIn.style.display='';
-      bEdit.style.display='none';bDel.style.display='none';bSave.style.display='';bCancel.style.display='';
-      editNameIn.focus();
-    });
-    const bDel=mkBtn('btn-danger btn-sm','削除',async()=>{
-      if(!confirm(`「${m.name}」を削除しますか？`))return;
-      try{ await sbDelete('members',`id=eq.${m.id}`); await loadMembers(); renderMList(); }catch(e){ showAlert('m-alert','削除に失敗しました','error'); }
-    });
-    const bSave=mkBtn('btn-success btn-sm','保存',async()=>{
-      const nv=editNameIn.value.trim(), ne=editEmailIn.value.trim();
-      const al=document.getElementById('m-alert');
-      if(!nv){al.innerHTML='<div class="alert alert-error">氏名を入力してください</div>';return;}
-      try{ await sbPatch('members',`id=eq.${m.id}`,{name:nv,email:ne||null}); await loadMembers(); renderMList(); al.innerHTML=''; }catch(e){ al.innerHTML='<div class="alert alert-error">更新に失敗しました</div>'; }
-    });
-    const bCancel=mkBtn('btn-secondary btn-sm','取消',()=>{
-      editNameIn.style.display='none';editEmailIn.style.display='none';nameSpan.style.display='';
-      bSave.style.display='none';bCancel.style.display='none';bEdit.style.display='';bDel.style.display='';
-    });
-    bSave.style.display='none';bCancel.style.display='none';
-    wrap.append(bEdit,bSave,bCancel,bDel);
-    d.append(nameSpan,editNameIn,editEmailIn,wrap);
-    el.appendChild(d);
+    const bE=mkBtn('btn-secondary btn-sm','修正',()=>{ns.style.display='none';ni.style.display='';ei.style.display='';bE.style.display='none';bD.style.display='none';bS.style.display='';bC.style.display='';ni.focus();});
+    const bD=mkBtn('btn-danger btn-sm','削除',async()=>{if(!confirm(`「${m.name}」を削除しますか？`))return;try{await sbDelete('members',`id=eq.${m.id}`);await loadMembers();renderMList();}catch(e){showAlert('m-alert','削除に失敗しました','error');}});
+    const bS=mkBtn('btn-success btn-sm','保存',async()=>{const nv=ni.value.trim(),ne=ei.value.trim();const al=document.getElementById('m-alert');if(!nv){al.innerHTML='<div class="alert alert-error">氏名を入力してください</div>';return;}try{await sbPatch('members',`id=eq.${m.id}`,{name:nv,email:ne||null});await loadMembers();renderMList();al.innerHTML='';}catch(e){al.innerHTML='<div class="alert alert-error">更新に失敗しました</div>';}});
+    const bC=mkBtn('btn-secondary btn-sm','取消',()=>{ni.style.display='none';ei.style.display='none';ns.style.display='';bS.style.display='none';bC.style.display='none';bE.style.display='';bD.style.display='';});
+    bS.style.display='none';bC.style.display='none';
+    wrap.append(bE,bS,bC,bD);d.append(ns,ni,ei,wrap);el.appendChild(d);
   });
 }
 
-document.getElementById('btn-open-member').addEventListener('click',()=>{
-  document.getElementById('m-name').value='';document.getElementById('m-email').value='';
-  document.getElementById('m-alert').innerHTML='';
-  renderMList();
-  document.getElementById('modal-member').classList.add('open');
-});
+document.getElementById('btn-open-member').addEventListener('click',()=>{document.getElementById('m-name').value='';document.getElementById('m-email').value='';document.getElementById('m-alert').innerHTML='';renderMList();document.getElementById('modal-member').classList.add('open');});
 document.getElementById('btn-do-add-member').addEventListener('click',async()=>{
-  const n=document.getElementById('m-name').value.trim(), e=document.getElementById('m-email').value.trim();
+  const n=document.getElementById('m-name').value.trim(),e=document.getElementById('m-email').value.trim();
   const al=document.getElementById('m-alert');
   if(!n){al.innerHTML='<div class="alert alert-error">氏名を入力してください</div>';return;}
-  try{
-    await sbPost('members',{name:n,email:e||null});
-    await loadMembers(); renderMList();
-    document.getElementById('m-name').value='';document.getElementById('m-email').value='';
-    al.innerHTML='<div class="alert alert-success">追加しました</div>';
-    setTimeout(()=>al.innerHTML='',2000);
-  }catch(e){ al.innerHTML='<div class="alert alert-error">登録に失敗しました（重複の可能性）</div>'; }
+  try{await sbPost('members',{name:n,email:e||null});await loadMembers();renderMList();document.getElementById('m-name').value='';document.getElementById('m-email').value='';al.innerHTML='<div class="alert alert-success">追加しました</div>';setTimeout(()=>al.innerHTML='',2000);}catch(e){al.innerHTML='<div class="alert alert-error">登録に失敗しました（重複の可能性）</div>';}
 });
 document.getElementById('btn-close-member').addEventListener('click',()=>document.getElementById('modal-member').classList.remove('open'));
-document.getElementById('modal-member').addEventListener('click',e=>{ if(e.target===e.currentTarget) e.currentTarget.classList.remove('open'); });
+document.getElementById('modal-member').addEventListener('click',e=>{if(e.target===e.currentTarget)e.currentTarget.classList.remove('open');});
 
-/* ===== 明細行（新規） ===== */
+/* 明細行（新規） */
 function addFItem(cat,date,amt){
-  const id='fi'+(fSeq++);
-  const div=document.createElement('div');div.className='amount-row';div.id=id;
+  const id='fi'+(fSeq++);const div=document.createElement('div');div.className='amount-row';div.id=id;
   div.innerHTML=`<div class="form-group"><label>費用区分</label><select>${CATS.map(c=>`<option${c===(cat||CATS[0])?' selected':''}>${c}</option>`).join('')}</select></div><div class="form-group"><label>支出日</label><input type="date" value="${date||''}" readonly></div><div class="form-group"><label>金額（円）</label><input type="number" min="0" value="${amt||''}" placeholder="0"></div><button class="btn-icon">×</button>`;
   div.querySelector('.btn-icon').addEventListener('click',()=>{div.remove();calcFTotal();});
   div.querySelectorAll('select,input').forEach(el=>el.addEventListener('input',calcFTotal));
   document.getElementById('f-items').appendChild(div);hookDates();calcFTotal();
 }
-function calcFTotal(){ let t=0;document.querySelectorAll('#f-items input[type=number]').forEach(el=>t+=Number(el.value)||0);document.getElementById('f-total').textContent=fmt$(t); }
-function getFItems(){ return Array.from(document.querySelectorAll('#f-items .amount-row')).map(r=>{const[s,d,a]=r.querySelectorAll('select,input[type=date],input[type=number]');return{cat:s.value,date:d.value,amt:Number(a.value)||0};}); }
+function calcFTotal(){let t=0;document.querySelectorAll('#f-items input[type=number]').forEach(el=>t+=Number(el.value)||0);document.getElementById('f-total').textContent=fmt$(t);}
+function getFItems(){return Array.from(document.querySelectorAll('#f-items .amount-row')).map(r=>{const[s,d,a]=r.querySelectorAll('select,input[type=date],input[type=number]');return{cat:s.value,date:d.value,amt:Number(a.value)||0};});}
 
-/* ===== 明細行（編集） ===== */
+/* 明細行（編集） */
 function addEItem(cat,date,amt){
-  const id='ei'+(eSeq++);
-  const div=document.createElement('div');div.className='amount-row';div.id=id;
+  const id='ei'+(eSeq++);const div=document.createElement('div');div.className='amount-row';div.id=id;
   div.innerHTML=`<div class="form-group"><label>費用区分</label><select>${CATS.map(c=>`<option${c===(cat||CATS[0])?' selected':''}>${c}</option>`).join('')}</select></div><div class="form-group"><label>支出日</label><input type="date" value="${date||''}" readonly></div><div class="form-group"><label>金額（円）</label><input type="number" min="0" value="${amt||''}" placeholder="0"></div><button class="btn-icon">×</button>`;
   div.querySelector('.btn-icon').addEventListener('click',()=>{div.remove();calcETotal();});
   div.querySelectorAll('select,input').forEach(el=>el.addEventListener('input',calcETotal));
   document.getElementById('e-items').appendChild(div);hookDates();calcETotal();
 }
-function calcETotal(){ let t=0;document.querySelectorAll('#e-items input[type=number]').forEach(el=>t+=Number(el.value)||0);document.getElementById('e-total').textContent=fmt$(t); }
-function getEItems(){ return Array.from(document.querySelectorAll('#e-items .amount-row')).map(r=>{const[s,d,a]=r.querySelectorAll('select,input[type=date],input[type=number]');return{cat:s.value,date:d.value,amt:Number(a.value)||0};}); }
+function calcETotal(){let t=0;document.querySelectorAll('#e-items input[type=number]').forEach(el=>t+=Number(el.value)||0);document.getElementById('e-total').textContent=fmt$(t);}
+function getEItems(){return Array.from(document.querySelectorAll('#e-items .amount-row')).map(r=>{const[s,d,a]=r.querySelectorAll('select,input[type=date],input[type=number]');return{cat:s.value,date:d.value,amt:Number(a.value)||0};});}
 
-/* ===== 申請番号生成 ===== */
-async function genId(){
-  const rows=await sbGet('expenses','select=id&order=applied_at.desc&limit=1');
-  if(!rows.length) return 'R-0001';
-  const last=parseInt(rows[0].id.replace('R-',''))||0;
-  return 'R-'+String(last+1).padStart(4,'0');
-}
-
-/* ===== 新規申請 ===== */
+/* 新規申請 */
 document.getElementById('btn-add-fitem').addEventListener('click',()=>addFItem());
 document.getElementById('btn-reset').addEventListener('click',resetForm);
 document.getElementById('btn-submit').addEventListener('click',submitForm);
-function resetForm(){
-  document.getElementById('f-date').value=new Date().toISOString().slice(0,10);
-  document.getElementById('f-note').value='';document.getElementById('f-items').innerHTML='';document.getElementById('form-alert').innerHTML='';
-  fSeq=0;addFItem();
-}
+function resetForm(){document.getElementById('f-date').value=new Date().toISOString().slice(0,10);document.getElementById('f-note').value='';document.getElementById('f-items').innerHTML='';document.getElementById('form-alert').innerHTML='';fSeq=0;addFItem();}
 async function submitForm(){
-  const date=document.getElementById('f-date').value;
-  const mem=getSelectedMember('f-name');
-  const al=document.getElementById('form-alert');
+  const date=document.getElementById('f-date').value,mem=getSelectedMember('f-name'),al=document.getElementById('form-alert');
   if(!date||!mem.id){al.innerHTML='<div class="alert alert-error">申請日と申請者名は必須です</div>';return;}
   const items=getFItems().filter(i=>i.amt>0);
   if(!items.length){al.innerHTML='<div class="alert alert-error">費用明細を1件以上入力してください</div>';return;}
   const total=items.reduce((s,i)=>s+i.amt,0);
   const btn=document.getElementById('btn-submit');btn.disabled=true;btn.textContent='送信中...';
   try{
-    const id=await genId();
+    const exps=await sbGet('expenses','select=id&order=applied_at.desc&limit=1');
+    const last=exps.length?parseInt(exps[0].id.replace('R-',''))||0:0;
+    const id='R-'+String(last+1).padStart(4,'0');
     await sbPost('expenses',{id,applied_date:date,member_id:mem.id,member_name:mem.name,note:document.getElementById('f-note').value,total,status:'未承認'});
     await sbPost('expense_items',items.map(i=>({expense_id:id,category:i.cat,item_date:i.date||null,amount:i.amt})));
     al.innerHTML=`<div class="alert alert-success">申請を受け付けました（${id}）</div>`;
     setTimeout(()=>{al.innerHTML='';resetForm();},3000);
-  }catch(e){ al.innerHTML='<div class="alert alert-error">送信に失敗しました：'+e.message+'</div>'; }
-  finally{ btn.disabled=false;btn.textContent='申請する'; }
+  }catch(e){al.innerHTML='<div class="alert alert-error">送信に失敗しました：'+e.message+'</div>';}
+  finally{btn.disabled=false;btn.textContent='申請する';}
 }
 
-/* ===== 一覧読み込み ===== */
+/* メール送信 */
+async function sendMail(expenseId){
+  const r=records.find(d=>d.id===expenseId);if(!r)return;
+  try{
+    const res=await fetch(`${SB_URL}/functions/v1/send-mail`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+SB_KEY},
+      body:JSON.stringify({applicant:r.member_name,amount:r.total,expense_id:r.id,applied_date:fmtD(r.applied_date)})
+    });
+    const data=await res.json();
+    console.log('メール送信結果:',data);
+  }catch(e){console.warn('メール送信エラー:',e);}
+}
+
+/* ステータス変更 */
+async function chStatus(id,st){
+  try{
+    await sbPatch('expenses',`id=eq.${id}`,{status:st});
+    await renderList();
+    if(st==='精算')sendMail(id).catch(e=>console.warn(e));
+  }catch(e){
+    console.error('chStatusエラー:',e);
+    showToast('更新に失敗しました');
+  }
+}
+
+/* 一覧 */
+document.getElementById('s-text').addEventListener('input',renderList);
+document.getElementById('s-status').addEventListener('change',renderList);
+document.getElementById('btn-csv').addEventListener('click',exportCSV);
+
 async function loadRecords(){
   document.getElementById('list-loading').style.display='block';
   document.getElementById('no-data').style.display='none';
@@ -565,73 +522,57 @@ async function loadRecords(){
     const ids=exps.map(e=>`"${e.id}"`).join(',');
     const items=ids?await sbGet('expense_items',`expense_id=in.(${ids})&order=expense_id`):[];
     records=exps.map(e=>({...e,items:items.filter(i=>i.expense_id===e.id).map(i=>({cat:i.category,date:i.item_date,amt:i.amount}))}));
-  }catch(e){ console.error(e); }
+  }catch(e){console.error(e);}
   document.getElementById('list-loading').style.display='none';
 }
 
 async function renderList(){
   await loadRecords();
-  const q=(document.getElementById('s-text').value||'').toLowerCase();
-  const st=document.getElementById('s-status').value;
+  const q=(document.getElementById('s-text').value||'').toLowerCase(),st=document.getElementById('s-status').value;
   const filtered=records.filter(r=>(!q||r.member_name.toLowerCase().includes(q))&&(!st||r.status===st));
-  const tbody=document.getElementById('list-body');
-  tbody.innerHTML='';
+  const tbody=document.getElementById('list-body');tbody.innerHTML='';
   document.getElementById('no-data').style.display=filtered.length?'none':'block';
   filtered.forEach(r=>{
     const tr=document.createElement('tr');
     tr.innerHTML=`<td><strong>${r.id}</strong></td><td>${fmtD(r.applied_date)}</td><td>${r.member_name}</td><td style="text-align:right;font-weight:600">${fmt$(r.total)}</td><td><span class="badge ${scls(r.status)}">${r.status}</span></td><td></td>`;
-    const td=tr.querySelector('td:last-child');
-    const wrap=document.createElement('div');wrap.className='action-btns';
+    const td=tr.querySelector('td:last-child'),wrap=document.createElement('div');wrap.className='action-btns';
     wrap.appendChild(mkBtn('btn-secondary btn-sm','詳細',()=>showDetail(r.id)));
     wrap.appendChild(mkBtn('btn-secondary btn-sm','編集',()=>showEdit(r.id)));
     wrap.appendChild(mkBtn('btn-danger btn-sm','削除',()=>delRecord(r.id)));
-    if(r.status==='未承認') wrap.appendChild(mkBtn('btn-success btn-sm','承認',()=>chStatus(r.id,'承認済')));
-    if(r.status==='承認済')  wrap.appendChild(mkBtn('btn-primary btn-sm','精算へ',()=>chStatus(r.id,'精算')));
-    if(r.status==='精算')    wrap.appendChild(mkBtn('btn-purple btn-sm','受領へ',()=>showReceipt(r.id)));
+    if(r.status==='未承認')wrap.appendChild(mkBtn('btn-success btn-sm','承認',()=>chStatus(r.id,'承認済')));
+    if(r.status==='承認済')wrap.appendChild(mkBtn('btn-primary btn-sm','精算へ',()=>chStatus(r.id,'精算')));
+    if(r.status==='精算')wrap.appendChild(mkBtn('btn-purple btn-sm','受領へ',()=>showReceipt(r.id)));
     td.appendChild(wrap);tbody.appendChild(tr);
   });
 }
 
-async function chStatus(id,st){
-  try{
-    await sbPatch('expenses',`id=eq.${id}`,{status:st});
-    await renderList();
-    if(st==='精算'){
-      sendMail(id).catch(e=>console.warn('メール送信エラー:',e));
-    }
-  }catch(e){ showToast('更新に失敗しました'); }
-}
-
-/* ===== 詳細 ===== */
+/* 詳細 */
 function showDetail(id){
   const r=records.find(d=>d.id===id);if(!r)return;
-  const rows=[['申請番号',r.id],['申請日',fmtD(r.applied_date)],['申請者',r.member_name],
-    ['ステータス',`<span class="badge ${scls(r.status)}">${r.status}</span>`],
-    ['合計金額',`<strong style="color:#1a3a5c">${fmt$(r.total)}</strong>`],['備考',r.note||'-']];
+  const rows=[['申請番号',r.id],['申請日',fmtD(r.applied_date)],['申請者',r.member_name],['ステータス',`<span class="badge ${scls(r.status)}">${r.status}</span>`],['合計金額',`<strong style="color:#1a3a5c">${fmt$(r.total)}</strong>`],['備考',r.note||'-']];
   const tbl=`<table style="width:100%;font-size:12px"><thead><tr style="background:#f4f5f7"><th style="padding:5px 8px;text-align:left">区分</th><th style="padding:5px 8px;text-align:left">支出日</th><th style="padding:5px 8px;text-align:right">金額</th></tr></thead><tbody>${(r.items||[]).map(i=>`<tr><td style="padding:5px 8px">${i.cat}</td><td style="padding:5px 8px">${fmtD(i.date)}</td><td style="padding:5px 8px;text-align:right">${fmt$(i.amt)}</td></tr>`).join('')}</tbody></table>`;
   document.getElementById('d-body').innerHTML=rows.map(([k,v])=>`<div class="detail-row"><span class="detail-key">${k}</span><span class="detail-val">${v}</span></div>`).join('')+`<div class="detail-row"><span class="detail-key">費用明細</span><span class="detail-val">${tbl}</span></div>`;
   const df=document.getElementById('d-footer');df.innerHTML='';
   df.appendChild(mkBtn('btn-secondary','閉じる',()=>document.getElementById('modal-detail').classList.remove('open')));
-  if(r.status==='未承認') df.appendChild(mkBtn('btn-success','承認する',()=>{chStatus(id,'承認済');document.getElementById('modal-detail').classList.remove('open');}));
-  if(r.status==='承認済')  df.appendChild(mkBtn('btn-primary','精算にする',()=>{chStatus(id,'精算');document.getElementById('modal-detail').classList.remove('open');}));
-  if(r.status==='精算')    df.appendChild(mkBtn('btn-purple','受領へ',()=>{document.getElementById('modal-detail').classList.remove('open');showReceipt(id);}));
+  if(r.status==='未承認')df.appendChild(mkBtn('btn-success','承認する',()=>{chStatus(id,'承認済');document.getElementById('modal-detail').classList.remove('open');}));
+  if(r.status==='承認済')df.appendChild(mkBtn('btn-primary','精算にする',()=>{chStatus(id,'精算');document.getElementById('modal-detail').classList.remove('open');}));
+  if(r.status==='精算')df.appendChild(mkBtn('btn-purple','受領へ',()=>{document.getElementById('modal-detail').classList.remove('open');showReceipt(id);}));
   document.getElementById('modal-detail').classList.add('open');
 }
 document.getElementById('modal-detail').addEventListener('click',e=>{if(e.target===e.currentTarget)e.currentTarget.classList.remove('open');});
 
-/* ===== 削除 ===== */
+/* 削除 */
 async function delRecord(id){
   const r=records.find(d=>d.id===id);if(!r)return;
   if(!confirm(`${r.id}（${r.member_name} / ${fmt$(r.total)}）を削除しますか？`))return;
-  try{ await sbDelete('expenses',`id=eq.${id}`); await renderList(); }catch(e){ showToast('削除に失敗しました'); }
+  try{await sbDelete('expenses',`id=eq.${id}`);await renderList();}catch(e){showToast('削除に失敗しました');}
 }
 
-/* ===== 編集 ===== */
+/* 編集 */
 document.getElementById('btn-add-eitem').addEventListener('click',()=>addEItem());
 document.getElementById('btn-close-edit').addEventListener('click',()=>document.getElementById('modal-edit').classList.remove('open'));
 document.getElementById('btn-save-edit').addEventListener('click',saveEdit);
 document.getElementById('modal-edit').addEventListener('click',e=>{if(e.target===e.currentTarget)e.currentTarget.classList.remove('open');});
-
 function showEdit(id){
   const r=records.find(d=>d.id===id);if(!r)return;
   editId=id;eSeq=0;
@@ -647,11 +588,8 @@ function showEdit(id){
   hookDates();
   document.getElementById('modal-edit').classList.add('open');
 }
-
 async function saveEdit(){
-  const date=document.getElementById('e-date').value;
-  const mem=getSelectedMember('e-name');
-  const al=document.getElementById('e-alert');
+  const date=document.getElementById('e-date').value,mem=getSelectedMember('e-name'),al=document.getElementById('e-alert');
   if(!date||!mem.id){al.innerHTML='<div class="alert alert-error">申請日と申請者名は必須です</div>';return;}
   const items=getEItems().filter(i=>i.amt>0);
   if(!items.length){al.innerHTML='<div class="alert alert-error">費用明細を1件以上入力してください</div>';return;}
@@ -661,13 +599,12 @@ async function saveEdit(){
     await sbPatch('expenses',`id=eq.${editId}`,{applied_date:date,member_id:mem.id,member_name:mem.name,note:document.getElementById('e-note').value,status:document.getElementById('e-status').value,total});
     await sbDelete('expense_items',`expense_id=eq.${editId}`);
     await sbPost('expense_items',items.map(i=>({expense_id:editId,category:i.cat,item_date:i.date||null,amount:i.amt})));
-    document.getElementById('modal-edit').classList.remove('open');
-    await renderList();
-  }catch(e){ al.innerHTML='<div class="alert alert-error">保存に失敗しました</div>'; }
-  finally{ btn.disabled=false;btn.textContent='保存する'; }
+    document.getElementById('modal-edit').classList.remove('open');await renderList();
+  }catch(e){al.innerHTML='<div class="alert alert-error">保存に失敗しました</div>';}
+  finally{btn.disabled=false;btn.textContent='保存する';}
 }
 
-/* ===== 受領書 ===== */
+/* 受領書 */
 document.getElementById('btn-close-receipt').addEventListener('click',()=>document.getElementById('modal-receipt').classList.remove('open'));
 document.getElementById('modal-receipt').addEventListener('click',e=>{if(e.target===e.currentTarget)e.currentTarget.classList.remove('open');});
 function showReceipt(id){
@@ -676,8 +613,7 @@ function showReceipt(id){
   document.getElementById('r-date').textContent=`${today.getFullYear()}年${today.getMonth()+1}月${today.getDate()}日`;
   document.getElementById('r-amount').textContent='￥'+Number(r.total).toLocaleString()+'－';
   document.getElementById('r-name').textContent=r.member_name;
-  const btn=document.getElementById('btn-do-receive');
-  const nb=btn.cloneNode(true);btn.parentNode.replaceChild(nb,btn);
+  const btn=document.getElementById('btn-do-receive'),nb=btn.cloneNode(true);btn.parentNode.replaceChild(nb,btn);
   nb.addEventListener('click',async()=>{
     await chStatus(id,'受領');
     showToast('✔ 受領しました');
@@ -686,10 +622,9 @@ function showReceipt(id){
   document.getElementById('modal-receipt').classList.add('open');
 }
 
-/* ===== 集計 ===== */
+/* 集計 */
 function renderStats(){
-  const sum=arr=>arr.reduce((s,r)=>s+r.total,0);
-  const g=st=>records.filter(r=>r.status===st);
+  const sum=arr=>arr.reduce((s,r)=>s+r.total,0),g=st=>records.filter(r=>r.status===st);
   document.getElementById('stats-grid').innerHTML=[
     {label:'全申請件数',val:records.length+'件',cls:''},
     {label:'未承認金額',val:fmt$(sum(g('未承認'))),cls:'amber'},
@@ -703,31 +638,22 @@ function renderStats(){
   document.getElementById('chart-area').innerHTML=`<p style="font-size:12px;color:#888;margin-bottom:10px">費用区分別</p>${bar(catT,'#1a3a5c')}<p style="font-size:12px;color:#888;margin:16px 0 10px">申請者別</p>${bar(nameT,'#1d9e75')}`;
 }
 
-/* ===== CSV ===== */
-document.getElementById('btn-csv').addEventListener('click',exportCSV);
+/* CSV */
 document.getElementById('btn-csv2').addEventListener('click',exportCSV);
-document.getElementById('s-text').addEventListener('input',renderList);
-document.getElementById('s-status').addEventListener('change',renderList);
-
 function exportCSV(){
   if(!records.length){alert('データがありません');return;}
   const hd=['申請番号','申請日','申請者名','費用区分','支出日','金額（円）','合計金額（円）','ステータス','備考'];
   const rows=[];
-  records.forEach(r=>{
-    (r.items&&r.items.length?r.items:[{}]).forEach((it,i)=>{
-      rows.push([r.id,r.applied_date,r.member_name,it.cat||'',it.date||'',it.amt||'',i===0?r.total:'',i===0?r.status:'',i===0?(r.note||''):''].map(v=>{v=String(v??'');return(v.includes(',')||v.includes('"'))?'"'+v.replace(/"/g,'""')+'"':v;}));
-    });
-  });
+  records.forEach(r=>{(r.items&&r.items.length?r.items:[{}]).forEach((it,i)=>{rows.push([r.id,r.applied_date,r.member_name,it.cat||'',it.date||'',it.amt||'',i===0?r.total:'',i===0?r.status:'',i===0?(r.note||''):''].map(v=>{v=String(v??'');return(v.includes(',')||v.includes('"'))?'"'+v.replace(/"/g,'""')+'"':v;}));});});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob(['\uFEFF',[hd,...rows].map(r=>r.join(',')).join('\n')],{type:'text/csv;charset=utf-8'}));
   a.download='立替精算_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
 }
 
-function showAlert(id,msg,type){ document.getElementById(id).innerHTML=`<div class="alert alert-${type}">${msg}</div>`; }
+function showAlert(id,msg,type){document.getElementById(id).innerHTML=`<div class="alert alert-${type}">${msg}</div>`;}
 
-/* ===== 初期化 ===== */
+/* 初期化 */
 document.getElementById('f-date').value=new Date().toISOString().slice(0,10);
-document.getElementById('list-loading').style.display='none';
 loadMembers();
 addFItem();
 hookDates();
